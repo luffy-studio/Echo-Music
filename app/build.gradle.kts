@@ -33,11 +33,17 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    versionCode = 167
-    versionName = "1.4.6"
+    versionCode = 169
+    versionName = "1.4.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
+
+    externalNativeBuild {
+      cmake {
+        cppFlags("-std=c++17")
+      }
+    }
 
     // LastFM API keys from GitHub Secrets
     val lastFmKey = "266d77b5790e413ada7e41ef100d017a"
@@ -215,6 +221,13 @@ android {
       excludes += "META-INF/DEPENDENCIES"
     }
   }
+
+  externalNativeBuild {
+    cmake {
+      path("src/main/cpp/CMakeLists.txt")
+      version = "3.22.1"
+    }
+  }
 }
 
 protobuf {
@@ -314,8 +327,8 @@ dependencies {
 
   implementation(libs.hilt)
   ksp(libs.hilt.compiler)
-  ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.20")
-  annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.20")
+  ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.21")
+  annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.21")
 
   implementation(project(":innertube"))
   implementation("com.github.MetrolistGroup.innertubex:innertubex-android:v0.7.0")
@@ -352,7 +365,6 @@ dependencies {
   implementation("androidx.compose.material:material-icons-extended:1.7.8")
   implementation(libs.work.runtime.ktx)
   implementation(libs.androidx.core.splashscreen)
-  implementation(libs.ffmpeg.kit.audio)
   implementation("io.github.dokar3:quickjs-kt-android:1.0.14")
   implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 

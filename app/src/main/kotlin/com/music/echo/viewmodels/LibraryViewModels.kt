@@ -101,11 +101,7 @@ constructor(
               null
             }) ?: true),
           ),
-          (try {
-            it[ExportedSongIdsKey]
-          } catch (e: Exception) {
-            null
-          }) ?: "",
+          it[ExportedSongIdsKey].orEmpty() to it[echo.music.iad1tya.constants.ExportFilesKey].orEmpty(),
           Pair(
             (try {
               it[HideExplicitKey]
@@ -134,17 +130,19 @@ constructor(
               it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           SongFilter.DOWNLOADED ->
-            database.downloadedSongs(sortType, descending).map {
-              it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
+            database.downloadedSongs(sortType, descending).map { cached ->
+              val files = exportedFiles(exportedSongIds.second)
+              (files.values + cached.filterNot { it.id in files }).filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           SongFilter.UPLOADED ->
             database.uploadedSongs(sortType, descending).map {
               it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           SongFilter.EXPORTED -> {
-            val ids = exportedSongIds.split(",").filter { it.isNotBlank() }
+            val files = exportedFiles(exportedSongIds.second)
+            val ids = exportedSongIds.first.split(",").filter { it.isNotBlank() && it !in files }
             database.getSongsByIdsFlow(ids).map {
-              it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
+              (files.values + it).filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           }
         }
@@ -588,4 +586,21 @@ constructor(
 class LibraryViewModel @Inject constructor() : ViewModel() {
   private val curScreen = mutableStateOf(LibraryFilter.LIBRARY)
   val filter: MutableState<LibraryFilter> = curScreen
+}
+
+
+internal fun exportedFiles(raw: String): Map<String, echo.music.iad1tya.db.entities.Song> {
+  if (raw.isEmpty()) return emptyMap()
+  val files = org.json.JSONObject(raw)
+  return files.keys().asSequence().associateWith { id ->
+    val file = files.getJSONObject(id)
+    val artist = file.optString("artist")
+    echo.music.iad1tya.db.entities.Song(
+      song = echo.music.iad1tya.db.entities.SongEntity(
+        id = file.getString("uri"), title = file.getString("name"), duration = file.optInt("duration"),
+        albumName = file.optString("album"), thumbnailUrl = file.optString("artwork"), isLocal = true,
+      ),
+      artists = if (artist.isBlank()) emptyList() else listOf(echo.music.iad1tya.db.entities.ArtistEntity(id = artist, name = artist)),
+    )
+  }
 }

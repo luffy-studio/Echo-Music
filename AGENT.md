@@ -131,7 +131,7 @@ Package/namespace: `echo.music.iad1tya` (app module). Application ID matches.
 - **Playback:** Media3 / ExoPlayer (`media3`, `media3-session`, `media3-hls`,
   `media3-ui`, `media3-okhttp`) — core logic in `playback/` (`MusicService.kt`,
   `PlayerConnection.kt`, `ExoDownloadService.kt`, `ChunkingDataSource.kt`,
-  `SleepTimer.kt`, `audio/`, `queues/`). FFmpegKit is used for audio export.
+  `SleepTimer.kt`, `audio/`, `queues/`). Native LAME MP3 Encoder via NDK/JNI is used for audio export.
 - **Networking:** Ktor client + Retrofit (both present — Retrofit mainly for
   legacy/simple calls, Ktor for newer code), OkHttp, Jsoup for scraping,
   kotlinx.serialization + Gson.
@@ -373,3 +373,7 @@ Ambient Mode keeps the existing album-art square and layers muted Canvas artwork
 ## Library UI Separation
 
 `LibraryScreen.kt` separates the Library overview into two equal-width custom `Row`-based swipeable underlined source tabs (`In App Library` and `Spotify`, driven by `HorizontalPager` with a live sliding underline indicator and session UI state without a new DataStore preference) positioned directly below the `ChipsRow` category filter bar (`Playlists`, `Songs`, `Albums`, `Artists`, `Podcasts`, `Local`). `LibraryFilter.SPOTIFY` is omitted from `ChipsRow` and the Appearance Settings default-chip picker while remaining in `LibraryFilter` for legacy preference fallback (`SPOTIFY` maps to the `Spotify` source tab and resets `ChipSortTypeKey` to `LIBRARY`). `LibraryMixScreen.kt` has its own `SortHeader` (`MixSortType`), renders In-App shortcut cards (`AutoPlaylistButton` 2-column grid), a simple `Playlists` heading and horizontal circular `LazyRow` thumbnail preview (`PlaylistThumbnail` with `CircleShape`), followed by `Artists` and `Albums`. `LibrarySpotifyScreen.kt` renders exclusively inside the `Spotify` tab using `LazyVerticalGrid` + `GridItem` cards (`GridItemsSizeKey`), with its own `SortHeader` (`Default`, `Name`, `Song count`), shimmer placeholders while loading, existing Spotify content with an animated rotating refresh button and Toast sync feedback (`spotify_sync_success` / `spotify_sync_failed`) when available, and a minimal empty state with no login prompt or CTA when unavailable. `SpotifyPlaylistDetailScreen.kt` includes inline TopAppBar search filtering by track title or artist alongside an animated rotating refresh button and Toast sync feedback.
+
+## Export source and progress
+
+- Audio export resolves and downloads a complete source stream instead of treating a single Media3 cache span as a full file; offline cache export needs a complete, validated cache reader. Each submitted export logs its job ID, source path, byte count and LAME session; cancellation keeps the active-song guard until the job cleans up. Song and YouTube song menus show export stage, measured overall progress, download bytes and a linear indicator using the existing DataStore export progress. The saved MP3 is read back and SHA-256 checked before completion.

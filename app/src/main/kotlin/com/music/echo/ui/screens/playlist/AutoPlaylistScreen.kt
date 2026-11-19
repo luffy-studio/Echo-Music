@@ -86,6 +86,11 @@ import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import android.net.Uri
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
+import echo.music.iad1tya.constants.ExportProgressKey
+import echo.music.iad1tya.constants.ExportingSongIdsKey
 import echo.music.iad1tya.constants.HideExplicitKey
 import echo.music.iad1tya.constants.DownloadedSongSortTypeKey
 import echo.music.iad1tya.constants.DownloadedSongSortDescendingKey
@@ -159,8 +164,9 @@ fun AutoPlaylistScreen(
   }
 
   val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
-
   val (ytmSync) = rememberPreference(YtmSyncKey, true)
+  val (exportProgressRaw) = rememberPreference(key = ExportProgressKey, defaultValue = "")
+  val (exportingSongIds) = rememberPreference(key = ExportingSongIdsKey, defaultValue = "")
 
   val likeLength = remember(songs) { songs?.fastSumBy { it.song.duration } ?: 0 }
 
@@ -329,6 +335,54 @@ fun AutoPlaylistScreen(
           }
         } else {
           if (!isSearching) {
+            if (exportingSongIds.isNotBlank()) {
+              item(key = "active_export_progress") {
+                val parts = remember(exportProgressRaw) { exportProgressRaw.split(":") }
+                val percent = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val songTitle = parts.getOrNull(2)?.let { Uri.decode(it) } ?: "Song"
+                val stageText = parts.getOrNull(3) ?: stringResource(R.string.exporting)
+
+                Surface(
+                  modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                  color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                  shape = RoundedCornerShape(16.dp),
+                ) {
+                  Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                      Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                          text = songTitle,
+                          style = MaterialTheme.typography.titleMedium,
+                          fontWeight = FontWeight.Bold,
+                          maxLines = 1,
+                        )
+                        Text(
+                          text = "$stageText…",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                      }
+                      Text(
+                        text = "$percent%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 8.dp),
+                      )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                      progress = { percent / 100f },
+                      modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    )
+                  }
+                }
+              }
+            }
+
             item(key = "playlist_header") {
               AutoPlaylistHeader(
                 name = playlist,

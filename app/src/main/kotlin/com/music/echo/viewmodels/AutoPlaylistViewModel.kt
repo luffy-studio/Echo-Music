@@ -77,11 +77,7 @@ constructor(
               null
             }) ?: false
           ),
-          (try {
-            it[ExportedSongIdsKey]
-          } catch (e: Exception) {
-            null
-          }) ?: "",
+          it[ExportedSongIdsKey].orEmpty() to it[echo.music.iad1tya.constants.ExportFilesKey].orEmpty(),
           Unit
         )
       }
@@ -95,17 +91,19 @@ constructor(
               it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           "downloaded" ->
-            database.downloadedSongs(sortType, descending).map {
-              it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
+            database.downloadedSongs(sortType, descending).map { cached ->
+              val files = exportedFiles(exportedSongIds.second)
+              (files.values + cached.filterNot { it.id in files }).filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           "uploaded" ->
             database.uploadedSongs(sortType, descending).map {
               it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           "exported" -> {
-            val ids = exportedSongIds.split(",").filter { it.isNotBlank() }
+            val files = exportedFiles(exportedSongIds.second)
+            val ids = exportedSongIds.first.split(",").filter { it.isNotBlank() && it !in files }
             database.getSongsByIdsFlow(ids).map {
-              it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
+              (files.values + it).filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs)
             }
           }
           else -> kotlinx.coroutines.flow.flowOf(emptyList())
