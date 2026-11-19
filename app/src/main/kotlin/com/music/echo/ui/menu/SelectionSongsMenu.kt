@@ -2,6 +2,7 @@ package echo.music.iad1tya.ui.menu
 
 import android.annotation.SuppressLint
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -44,12 +45,14 @@ import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.LocalSyncUtils
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.ExportDirectoryUriKey
 import echo.music.iad1tya.db.entities.PlaylistSongMap
 import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.models.toSongEntity
+import echo.music.iad1tya.playback.AudioExportService
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.ui.component.DefaultDialog
@@ -57,6 +60,7 @@ import echo.music.iad1tya.ui.component.Material3MenuGroup
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
+import echo.music.iad1tya.utils.rememberPreference
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,6 +83,7 @@ fun SelectionSongMenu(
   val syncUtils = LocalSyncUtils.current
   val listenTogetherManager = echo.music.iad1tya.LocalListenTogetherManager.current
   val isGuest = listenTogetherManager?.isGuestPlaybackRestricted == true
+  val (exportDirectoryUri) = rememberPreference(key = ExportDirectoryUriKey, defaultValue = "")
 
   val allInLibrary by remember {
     mutableStateOf(
@@ -321,6 +326,42 @@ fun SelectionSongMenu(
                   )
                 },
                 onClick = { showChoosePlaylistDialog = true }
+              )
+            )
+            add(
+              Material3MenuItemData(
+                title = { Text(text = stringResource(R.string.action_export)) },
+                description = { Text(text = stringResource(R.string.export_desc)) },
+                icon = {
+                  Icon(
+                    painter = painterResource(R.drawable.file_export),
+                    contentDescription = null,
+                  )
+                },
+                onClick = {
+                  onDismiss()
+                  if (exportDirectoryUri.isBlank()) {
+                    Toast.makeText(context, R.string.export_directory_not_set, Toast.LENGTH_SHORT).show()
+                  } else {
+                    songSelection.forEach { song ->
+                      AudioExportService.start(
+                        context = context,
+                        songId = song.id,
+                        songTitle = song.song.title,
+                        songArtist = song.artists.joinToString(", ") { it.name },
+                        songAlbum = song.album?.title ?: song.song.albumName ?: "",
+                        artworkUrl = song.thumbnailUrl ?: "",
+                        targetDirectoryUri = exportDirectoryUri,
+                      )
+                    }
+                    Toast.makeText(
+                      context,
+                      "Exporting ${songSelection.size} songs",
+                      Toast.LENGTH_SHORT
+                    ).show()
+                    clearAction()
+                  }
+                }
               )
             )
             add(

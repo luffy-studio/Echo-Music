@@ -73,4 +73,21 @@ class ExportTaskQueueTest {
 
     assertEquals(1, exports)
   }
+
+  @Test
+  fun bulkExportProcessesAllSelectedSongsSequentially() = runTest {
+    var idleCount = 0
+    val exportedIds = mutableListOf<String>()
+    val queue = ExportTaskQueue(this, { idleCount++ }, StandardTestDispatcher(testScheduler))
+    val selectedIds = listOf("song_1", "song_2", "song_3", "song_4")
+
+    selectedIds.forEach { id ->
+      queue.submit(id) { exportedIds.add(id) }
+    }
+
+    advanceUntilIdle()
+
+    assertEquals(selectedIds, exportedIds)
+    assertEquals(1, idleCount)
+  }
 }

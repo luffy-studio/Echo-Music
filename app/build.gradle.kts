@@ -39,6 +39,12 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
 
+    externalNativeBuild {
+      cmake {
+        cppFlags("-std=c++17")
+      }
+    }
+
     // LastFM API keys from GitHub Secrets
     val lastFmKey = "266d77b5790e413ada7e41ef100d017a"
     val lastFmSecret = "41d3ae3b039ddac06c37fb30055bf93b"
@@ -215,6 +221,13 @@ android {
       excludes += "META-INF/DEPENDENCIES"
     }
   }
+
+  externalNativeBuild {
+    cmake {
+      path("src/main/cpp/CMakeLists.txt")
+      version = "3.22.1"
+    }
+  }
 }
 
 protobuf {
@@ -352,7 +365,6 @@ dependencies {
   implementation("androidx.compose.material:material-icons-extended:1.7.8")
   implementation(libs.work.runtime.ktx)
   implementation(libs.androidx.core.splashscreen)
-  implementation(libs.ffmpeg.kit.audio)
   implementation("io.github.dokar3:quickjs-kt-android:1.0.14")
   implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 

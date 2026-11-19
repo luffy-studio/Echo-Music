@@ -182,6 +182,33 @@ fun SongMenu(
       }
     )
   }
+
+  var showCancelExportDialog by
+    androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+  if (showCancelExportDialog) {
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { showCancelExportDialog = false },
+      title = { androidx.compose.material3.Text("Export already in progress") },
+      text = { androidx.compose.material3.Text("Do you want to cancel the current export?") },
+      confirmButton = {
+        androidx.compose.material3.Button(
+          onClick = {
+            showCancelExportDialog = false
+            echo.music.iad1tya.playback.AudioExportService.cancelAll(context)
+            android.widget.Toast.makeText(context, "Export cancelled", android.widget.Toast.LENGTH_SHORT).show()
+            onDismiss()
+          }
+        ) {
+          androidx.compose.material3.Text("Cancel Export")
+        }
+      },
+      dismissButton = {
+        androidx.compose.material3.OutlinedButton(onClick = { showCancelExportDialog = false }) {
+          androidx.compose.material3.Text("Continue Exporting")
+        }
+      }
+    )
+  }
   val exportProgress =
     remember(exportProgressRaw, song.id) {
       exportProgressRaw
@@ -822,18 +849,8 @@ fun SongMenu(
               when {
                 isExporting ->
                   Material3MenuItemData(
-                    title = {
-                      val text = stringResource(R.string.exporting)
-                      Text(text = if (exportProgress != null) "$text • $exportProgress%" else text)
-                    },
-                    icon = {
-                      CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                        progress = { if (exportProgress != null) exportProgress / 100f else 0f }
-                      )
-                    },
-                    onClick = {}
+                    title = { echo.music.iad1tya.ui.component.ExportProgress(exportProgressRaw, song.id, song.song.title) },
+                    onClick = { showCancelExportDialog = true },
                   )
                 isExported ->
                   Material3MenuItemData(

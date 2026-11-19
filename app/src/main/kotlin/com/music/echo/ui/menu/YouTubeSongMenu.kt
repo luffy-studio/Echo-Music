@@ -62,6 +62,7 @@ import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.EnableExportAsMp3Key
 import echo.music.iad1tya.constants.ExportDirectoryUriKey
 import echo.music.iad1tya.constants.ExportedSongIdsKey
+import echo.music.iad1tya.constants.ExportProgressKey
 import echo.music.iad1tya.constants.ExportingSongIdsKey
 import echo.music.iad1tya.constants.ListItemHeight
 import echo.music.iad1tya.constants.ListThumbnailSize
@@ -119,6 +120,11 @@ fun YouTubeSongMenu(
   val (exportDirectoryUri) = rememberPreference(key = ExportDirectoryUriKey, defaultValue = "")
   val (exportingSongIds) = rememberPreference(key = ExportingSongIdsKey, defaultValue = "")
   val (exportedSongIds) = rememberPreference(key = ExportedSongIdsKey, defaultValue = "")
+  val (exportProgressRaw) = rememberPreference(key = ExportProgressKey, defaultValue = "")
+  val exportProgress = remember(exportProgressRaw, song.id) {
+    val parts = exportProgressRaw.split(":")
+    if (parts.firstOrNull() == song.id) parts.getOrNull(1)?.toIntOrNull() else null
+  }
 
   val isExporting =
     remember(exportingSongIds, song.id) { exportingSongIds.split(",").contains(song.id) }
@@ -164,6 +170,33 @@ fun YouTubeSongMenu(
       dismissButton = {
         androidx.compose.material3.OutlinedButton(onClick = { showReExportDialog = false }) {
           androidx.compose.material3.Text("No")
+        }
+      }
+    )
+  }
+
+  var showCancelExportDialog by
+    androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+  if (showCancelExportDialog) {
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { showCancelExportDialog = false },
+      title = { androidx.compose.material3.Text("Export already in progress") },
+      text = { androidx.compose.material3.Text("Do you want to cancel the current export?") },
+      confirmButton = {
+        androidx.compose.material3.Button(
+          onClick = {
+            showCancelExportDialog = false
+            echo.music.iad1tya.playback.AudioExportService.cancelAll(context)
+            android.widget.Toast.makeText(context, "Export cancelled", android.widget.Toast.LENGTH_SHORT).show()
+            onDismiss()
+          }
+        ) {
+          androidx.compose.material3.Text("Cancel Export")
+        }
+      },
+      dismissButton = {
+        androidx.compose.material3.OutlinedButton(onClick = { showCancelExportDialog = false }) {
+          androidx.compose.material3.Text("Continue Exporting")
         }
       }
     )
@@ -613,11 +646,8 @@ fun YouTubeSongMenu(
               when {
                 isExporting ->
                   Material3MenuItemData(
-                    title = { Text(text = stringResource(R.string.exporting)) },
-                    icon = {
-                      CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    },
-                    onClick = {}
+                    title = { echo.music.iad1tya.ui.component.ExportProgress(exportProgressRaw, song.id, song.title) },
+                    onClick = { showCancelExportDialog = true },
                   )
                 isExported ->
                   Material3MenuItemData(

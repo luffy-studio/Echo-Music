@@ -18,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -45,7 +46,9 @@ import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.EnableExportAsMp3Key
 import echo.music.iad1tya.constants.ExportDirectoryUriKey
+import echo.music.iad1tya.constants.ExportProgressKey
 import echo.music.iad1tya.constants.ExportingSongIdsKey
 import echo.music.iad1tya.constants.MaxImageCacheSizeKey
 import echo.music.iad1tya.constants.MaxSongCacheSizeKey
@@ -64,6 +67,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.encodeUtf8
 import timber.log.Timber
 
@@ -73,9 +77,9 @@ fun StorageSettings(
   navController: NavController,
   scrollBehavior: TopAppBarScrollBehavior,
   autoOpenExportPicker: Boolean = false,
-  highlightKey: String? = null
+  highlightKey: String? = null,
 ) {
-  val scrollState = androidx.compose.foundation.rememberScrollState()
+  val scrollState = rememberScrollState()
 
   val context = LocalContext.current
   val database = LocalDatabase.current
@@ -84,18 +88,19 @@ fun StorageSettings(
   val downloadCache = LocalPlayerConnection.current?.service?.downloadCache ?: return
 
   val coroutineScope = rememberCoroutineScope()
-  val songCacheString = stringResource(R.string.song_cache).lowercase()
-  val imageCacheString = stringResource(R.string.image_cache).lowercase()
-  val (maxImageCacheSize, onMaxImageCacheSizeChange) =
-    rememberPreference(key = MaxImageCacheSizeKey, defaultValue = 512)
-  val (maxSongCacheSize, onMaxSongCacheSizeChange) =
-    rememberPreference(key = MaxSongCacheSizeKey, defaultValue = 1024)
+  val (maxImageCacheSize) = rememberPreference(key = MaxImageCacheSizeKey, defaultValue = 512)
+  val (maxSongCacheSize) = rememberPreference(key = MaxSongCacheSizeKey, defaultValue = 1024)
   val (exportDirectoryUri, onExportDirectoryUriChange) =
     rememberPreference(
       key = ExportDirectoryUriKey,
       defaultValue = "",
     )
+  val (enableExportAsMp3, onEnableExportAsMp3Change) =
+    rememberPreference(key = EnableExportAsMp3Key, defaultValue = false)
+
   val exportingSongIds by rememberPreference(ExportingSongIdsKey, "")
+  val (exportProgressRaw) = rememberPreference(key = ExportProgressKey, defaultValue = "")
+
   val exportDirectoryLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
       if (uri != null) {
@@ -128,11 +133,11 @@ fun StorageSettings(
       }
     }
   }
+
   var exportPickerAutoOpened by remember { mutableStateOf(false) }
   LaunchedEffect(autoOpenExportPicker) {
     if (autoOpenExportPicker && !exportPickerAutoOpened) {
       exportPickerAutoOpened = true
-      Timber.d("Auto-opening export picker, autoOpenExportPicker=$autoOpenExportPicker")
       launchExportPicker()
     }
   }
@@ -141,32 +146,13 @@ fun StorageSettings(
   var clearCacheDialog by remember { mutableStateOf(false) }
   var clearImageCacheDialog by remember { mutableStateOf(false) }
 
-  var showCacheWarningDialog by remember { mutableStateOf(false) }
-  var cacheType by remember { mutableStateOf("") }
-  var cacheUsage by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
-  var onConfirmAction by remember { mutableStateOf<() -> Unit>({}) }
-
-  var imageCacheSize by remember {
-    androidx.compose.runtime.mutableLongStateOf(imageDiskCache.size)
-  }
+  var imageCacheSize by remember { mutableLongStateOf(imageDiskCache.size) }
   var playerCacheSize by remember {
-    androidx.compose.runtime.mutableLongStateOf(tryOrNull { playerCache.cacheSpace } ?: 0)
+    mutableLongStateOf(tryOrNull { playerCache.cacheSpace } ?: 0)
   }
   var downloadCacheSize by remember {
     mutableLongStateOf(tryOrNull { downloadCache.cacheSpace } ?: 0)
   }
-  val imageCacheProgress by
-    animateFloatAsState(
-      targetValue =
-        (imageCacheSize.toFloat() / (maxImageCacheSize * 1024 * 1024L)).coerceIn(0f, 1f),
-      label = "imageCacheProgress",
-    )
-  val playerCacheProgress by
-    animateFloatAsState(
-      targetValue =
-        (playerCacheSize.toFloat() / (maxSongCacheSize * 1024 * 1024L)).coerceIn(0f, 1f),
-      label = "playerCacheProgress",
-    )
 
   LaunchedEffect(maxImageCacheSize) {
     SingletonImageLoader.reset()
@@ -217,6 +203,7 @@ fun StorageSettings(
       content = { Text(text = stringResource(R.string.clear_downloads_dialog)) }
     )
   }
+
   if (clearCacheDialog) {
     ActionPromptDialog(
       title = stringResource(R.string.clear_song_cache),
@@ -231,6 +218,7 @@ fun StorageSettings(
       content = { Text(text = stringResource(R.string.clear_song_cache_dialog)) }
     )
   }
+
   if (clearImageCacheDialog) {
     ActionPromptDialog(
       title = stringResource(R.string.clear_image_cache),
@@ -267,36 +255,6 @@ fun StorageSettings(
     )
   }
 
-  if (showCacheWarningDialog) {
-    AlertDialog(
-      onDismissRequest = { showCacheWarningDialog = false },
-      title = { Text(stringResource(R.string.cache_size_warning_title)) },
-      text = {
-        Text(
-          stringResource(R.string.cache_size_warning_message, formatFileSize(cacheUsage), cacheType)
-        )
-      },
-      confirmButton = {
-        TextButton(
-          onClick = {
-            onConfirmAction()
-            showCacheWarningDialog = false
-          }
-        ) {
-          Text(
-            stringResource(R.string.cache_size_warning_confirm),
-            color = MaterialTheme.colorScheme.error
-          )
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showCacheWarningDialog = false }) {
-          Text(stringResource(id = android.R.string.cancel))
-        }
-      }
-    )
-  }
-
   Column(
     Modifier.windowInsetsPadding(
         LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal)
@@ -319,14 +277,14 @@ fun StorageSettings(
             isHighlighted = (highlightKey == stringResource(R.string.downloaded_songs)),
             icon = painterResource(R.drawable.storage),
             title = { Text(stringResource(R.string.downloaded_songs)) },
-            description = { Text(text = formatFileSize(downloadCacheSize)) }
+            description = { Text(text = formatFileSize(downloadCacheSize)) },
           ),
           Material3SettingsItem(
             isHighlighted = (highlightKey == stringResource(R.string.clear_all_downloads)),
             icon = painterResource(R.drawable.clear_all),
             title = { Text(stringResource(R.string.clear_all_downloads)) },
             description = { Text(stringResource(R.string.clear_all_downloads_desc)) },
-            onClick = { clearDownloads = true }
+            onClick = { clearDownloads = true },
           ),
           Material3SettingsItem(
             isHighlighted = (highlightKey == stringResource(R.string.export_directory)),
@@ -336,27 +294,91 @@ fun StorageSettings(
               Text(
                 text =
                   if (exportDirectoryUri.isBlank()) {
-                    stringResource(R.string.not_set)
+                    stringResource(R.string.export_directory_not_set)
                   } else {
                     exportDirectoryUri
                   }
               )
             },
-            onClick = { launchExportPicker() }
-          )
-        )
+            onClick = { launchExportPicker() },
+          ),
+          Material3SettingsItem(
+            icon = painterResource(R.drawable.file_export),
+            title = { Text(stringResource(R.string.export_all_songs)) },
+            description = { Text(stringResource(R.string.export_music)) },
+            onClick = {
+              if (exportDirectoryUri.isBlank()) {
+                Toast.makeText(context, R.string.export_directory_not_set, Toast.LENGTH_SHORT).show()
+              } else {
+                coroutineScope.launch(Dispatchers.IO) {
+                  val downloadedSongs = database.downloadedSongsByNameAsc().first()
+                  if (downloadedSongs.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                      Toast.makeText(context, R.string.playlist_is_empty, Toast.LENGTH_SHORT).show()
+                    }
+                  } else {
+                    downloadedSongs.forEach { song ->
+                      AudioExportService.start(
+                        context = context,
+                        songId = song.id,
+                        songTitle = song.song.title,
+                        songArtist = song.artists.joinToString(", ") { it.name },
+                        songAlbum = song.album?.title ?: song.song.albumName ?: "",
+                        artworkUrl = song.thumbnailUrl ?: "",
+                        targetDirectoryUri = exportDirectoryUri,
+                      )
+                    }
+                    withContext(Dispatchers.Main) {
+                      Toast.makeText(
+                        context,
+                        "Exporting ${downloadedSongs.size} songs",
+                        Toast.LENGTH_SHORT
+                      ).show()
+                    }
+                  }
+                }
+              }
+            },
+          ),
+          Material3SettingsItem(
+            icon = painterResource(R.drawable.music_note),
+            title = { Text(stringResource(R.string.export_desc)) },
+            trailingContent = {
+              Switch(
+                checked = enableExportAsMp3,
+                onCheckedChange = { onEnableExportAsMp3Change(it) },
+              )
+            },
+            onClick = { onEnableExportAsMp3Change(!enableExportAsMp3) },
+          ),
+        ),
     )
 
-    if (exportingSongIds.isNotBlank()) {
+    val progress = remember(exportProgressRaw) { exportProgressRaw.split(':', limit = 4) }
+    if (progress.size == 4) {
+      val percent = progress[1].toIntOrNull() ?: 0
       Spacer(modifier = Modifier.height(16.dp))
       Material3SettingsGroup(
         scrollState = scrollState,
-        items = listOf(Material3SettingsItem(
-          icon = painterResource(R.drawable.close),
-          title = { Text(stringResource(R.string.cancel_exports)) },
-          description = { Text(stringResource(R.string.exporting)) },
-          onClick = { AudioExportService.cancelAll(context) },
-        )),
+        title = stringResource(R.string.exporting),
+        items =
+          listOf(
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.file_export),
+              title = { Text(android.net.Uri.decode(progress[2])) },
+              description = {
+                Column {
+                  Text("${progress[3]} · $percent%")
+                  androidx.compose.material3.LinearProgressIndicator(progress = { percent / 100f })
+                }
+              },
+            ),
+            *if (exportingSongIds.isNotBlank()) arrayOf(Material3SettingsItem(
+              icon = painterResource(R.drawable.close),
+              title = { Text(stringResource(R.string.cancel_exports)) },
+              onClick = { AudioExportService.cancelAll(context) },
+            )) else emptyArray(),
+          ),
       )
     }
 
@@ -372,9 +394,9 @@ fun StorageSettings(
             icon = painterResource(R.drawable.cached),
             title = { Text(stringResource(R.string.clear_song_cache)) },
             description = { Text("${formatFileSize(playerCacheSize)} used") },
-            onClick = { clearCacheDialog = true }
+            onClick = { clearCacheDialog = true },
           )
-        )
+        ),
     )
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -389,9 +411,9 @@ fun StorageSettings(
             icon = painterResource(R.drawable.image),
             title = { Text(stringResource(R.string.clear_image_cache)) },
             description = { Text("${formatFileSize(imageCacheSize)} used") },
-            onClick = { clearImageCacheDialog = true }
+            onClick = { clearImageCacheDialog = true },
           )
-        )
+        ),
     )
     Spacer(Modifier.padding(bottom = 30.dp))
 
@@ -414,6 +436,6 @@ fun StorageSettings(
           contentDescription = null,
         )
       }
-    }
+    },
   )
 }
